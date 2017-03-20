@@ -59,8 +59,14 @@ namespace octet {
   public:
     points_generator() {}
 
-    std::vector<vec3> generate_random_points(int num_points) {
-      std::srand(std::time(nullptr));
+    std::vector<vec3> generate_random_points(int num_points, int seed = 0) {
+      if (seed == 0) {
+        std::srand(std::time(nullptr));
+      }
+      else {
+        std::srand(seed);
+      }
+      
       //std::srand(0);
       waypoints = std::vector<vec3>();
       sorted_waypoints = std::vector<vec3>();

@@ -23,7 +23,7 @@ namespace octet {
     curve_mode current_curve;
     curve_mode prev_curve;
 
-    bool debug_mode = true;
+    bool debug_mode = false;
 
     //// scene for drawing box
     //ref<visual_scene> app_scene;
@@ -45,6 +45,8 @@ namespace octet {
     int track_length = 10;
     int curve_step;
 
+    unsigned int seed;
+
 
     // Used to load shader files into a string varaible
     std::string load_file(const char* file_name) {
@@ -62,6 +64,14 @@ namespace octet {
       return out;
     }
 
+    void clear_curve() {
+      seed = std::time(nullptr);
+      TRACK_WIDTH = 0.1f;
+      DETAIL_STEP = 0.01f;
+      height_scale = 0.5f;
+      track_length = 10;
+    }
+
     void refresh_curve() {
       switch (current_curve) {
       case QUADRATIC_BEZIER:
@@ -75,12 +85,12 @@ namespace octet {
         break;
       }
 
-      perlin_noise = perlin();
+      perlin_noise = perlin(seed);
 
       // create points for curves
       int num_points = curve_step * track_length + 1;
       waypoints = std::vector<vec3>();
-      waypoints = pg.generate_random_points(num_points);
+      waypoints = pg.generate_random_points(num_points, seed);
 
 
       debugBezBuff = std::vector<vec3>();
@@ -251,6 +261,7 @@ namespace octet {
       glGenBuffers(1, &vertex_buffer); // Sets up our vertex array buffer for rendering
       road_shader.init(load_file("shaders/road.vert").c_str(), load_file("shaders/road.frag").c_str()); // loads, compiles and links our shader programs
 
+      clear_curve();
       refresh_curve();
     }
 
@@ -307,6 +318,7 @@ namespace octet {
       get_viewport_size(vx, vy);
 
       if (is_key_going_up(key_f5)) {
+        clear_curve();
         refresh_curve();
       }
 
@@ -390,13 +402,44 @@ namespace octet {
         //   |/    |/    |
         //   1-----3-----5
 
+        std::vector<float> leftTrackVertBuff = vertBuff;
+        std::vector<float> rightTrackVertBuff = vertBuff;
+        for (int i = 0; i < leftTrackVertBuff.size(); i += 3) {
+          leftTrackVertBuff[i] = 0.5f * leftTrackVertBuff[i] - 0.5f;
+          leftTrackVertBuff[i+1] = 0.66666f * leftTrackVertBuff[i + 1] - 0.33333f;
+        }
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        glBufferData(GL_ARRAY_BUFFER, vertBuff.size() * sizeof(GLfloat), &vertBuff[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, leftTrackVertBuff.size() * sizeof(GLfloat), &leftTrackVertBuff[0], GL_DYNAMIC_DRAW);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
         glEnableVertexAttribArray(attribute_pos);
         glUseProgram(road_shader.get_program());
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, vertBuff.size() / 3);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, leftTrackVertBuff.size() / 3);
         glBindVertexArray(attribute_pos);
+
+
+        for (int i = 0; i < rightTrackVertBuff.size(); i += 3) {
+          rightTrackVertBuff[i + 1] = cos(90)*rightTrackVertBuff[i + 1] - sin(90)*rightTrackVertBuff[i + 2];
+          rightTrackVertBuff[i + 2] = sin(90)*rightTrackVertBuff[i + 1] + cos(90)*rightTrackVertBuff[i + 2];
+
+          rightTrackVertBuff[i] = 0.5f * rightTrackVertBuff[i] + 0.5f;
+          rightTrackVertBuff[i + 2] = 0.66666f * rightTrackVertBuff[i + 1] - 0.33333f;
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+        glBufferData(GL_ARRAY_BUFFER, rightTrackVertBuff.size() * sizeof(GLfloat), &rightTrackVertBuff[0], GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+        glEnableVertexAttribArray(attribute_pos);
+        glUseProgram(road_shader.get_program());
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, rightTrackVertBuff.size() / 3);
+        glBindVertexArray(attribute_pos);
+
+        glUseProgram(0);
+        glColor3f(0.0f, 0.0f, 0.0f); //yellow colour
+        glBegin(GL_LINES); //starts drawing of points
+          glVertex3f(-1, 0.33333f, 0);
+          glVertex3f(1, 0.33333f, 0);
+          glVertex3f(0, 0.33333f, 0);
+          glVertex3f(0, -1, 0);
+        glEnd();
       }
     }
 
