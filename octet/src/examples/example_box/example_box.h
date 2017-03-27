@@ -4,16 +4,27 @@
 //
 // Modular Framework for OpenGLES2 rendering on multiple platforms.
 //
+
+
 #include <stdlib.h>
 #include <ctime>
 #include "points_generator.h"
 #include "perlin.h"
+#include "RaceUtils.h"
+#include "track_mesh.h"
 
 
 namespace octet {
   /// Scene containing a box with octet.
   class example_box : public app {
   private:
+
+    track_mesh track;
+    perlin perlin_noise;
+    points_generator pg;
+    std::vector<vec3> waypoints;
+
+
 
     enum curve_mode {
       QUADRATIC_BEZIER = 0,
@@ -23,53 +34,28 @@ namespace octet {
     curve_mode current_curve;
     curve_mode prev_curve;
 
-    bool debug_mode = false;
+    bool debug_mode = true;
 
     //// scene for drawing box
     //ref<visual_scene> app_scene;
 
-    std::vector<std::tuple<vec3, vec3>> input;
-    std::vector<float> vertBuff;
-    std::vector<int> faceBuff;
-    std::vector<vec3> debugBezBuff; // Used to show the actual bezier path with debug lines
-    GLuint vertex_buffer;
-    shader road_shader;
 
-    perlin perlin_noise;
-    points_generator pg;
-    std::vector<vec3> waypoints;
-
-    float TRACK_WIDTH = 0.1f;
-    float DETAIL_STEP = 0.01f;
-    float height_scale = 0.5f;
-    int track_length = 10;
+    float TRACK_WIDTH;
+    float DETAIL_STEP;
+    float height_scale;
+    int track_length;
     int curve_step;
 
     unsigned int seed;
 
 
-    // Used to load shader files into a string varaible
-    std::string load_file(const char* file_name) {
-      std::ifstream is(file_name);
-      if (is.bad() || !is.is_open()) return nullptr;
-      char buffer[2048];
-      // loop over lines
-      std::string out;
-      while (!is.eof()) {
-        is.getline(buffer, sizeof(buffer));
-        out += buffer;
-        out += "\n";
-      }
-      //printf("%s", out.c_str());
-      return out;
-    }
-
     void clear_curve() {
       seed = std::time(nullptr);
-      TRACK_WIDTH = 0.1f;
+      seed = 10000;
+      TRACK_WIDTH = 0.00f;
       DETAIL_STEP = 0.01f;
       height_scale = 0.5f;
-      track_length = 10;
+      track_length = 80;
     }
 
     void refresh_curve() {
@@ -90,12 +76,13 @@ namespace octet {
       // create points for curves
       int num_points = curve_step * track_length + 1;
       waypoints = std::vector<vec3>();
-      waypoints = pg.generate_random_points(num_points, seed);
+      waypoints = pg.generate_radial_points(num_points, seed);
 
 
-      debugBezBuff = std::vector<vec3>();
-      vertBuff = std::vector<float>();
-      faceBuff = std::vector<int>();
+      std::vector<vec3> debugBezBuff = std::vector<vec3>();
+      std::vector<float> vertBuff = std::vector<float>();
+      std::vector<int> faceBuff = std::vector<int>();
+
       int vertPair = 0;
 
       // This is to avoid an infinite loop when adding points...
@@ -164,6 +151,7 @@ namespace octet {
           debugBezBuff.push_back(pos);
         }
       }
+      track.refresh_track(vertBuff, faceBuff, debugBezBuff);
       /*
           float TRACK_WIDTH = 0.1f;
     float DETAIL_STEP = 0.01f;
@@ -173,8 +161,8 @@ namespace octet {
       */
       printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
       printf("RACE TRACK\n_____________________\nTrack width: %f\nMesh Detail: %f\nHeight Scale: %f\nTrack Length: %d\n_____________________\n", TRACK_WIDTH, DETAIL_STEP, height_scale, track_length);
-      printf("Mesh with %d vertices\n", (int)vertBuff.size() / 3);
-      printf("%d total faces\n", (int)faceBuff.size() / 3);
+      printf("Mesh with %d vertices\n", (int) vertBuff.size() / 3);
+      printf("%d total faces\n", (int) faceBuff.size() / 3);
     }
 
     vec3 get_bezier_point(float t, int iter) {
@@ -252,63 +240,19 @@ namespace octet {
 
     /// this is called once OpenGL is initialized
     void app_init() {
+      track = track_mesh();
+      track.init();
       perlin_noise = perlin();
       pg = points_generator();
 
       current_curve = CATMULL_ROM;
       track_length = 10;
 
-      glGenBuffers(1, &vertex_buffer); // Sets up our vertex array buffer for rendering
-      road_shader.init(load_file("shaders/road.vert").c_str(), load_file("shaders/road.frag").c_str()); // loads, compiles and links our shader programs
-
       clear_curve();
       refresh_curve();
     }
 
-    void file_create() {
-      float scale_mult = 20.0f / TRACK_WIDTH;
-      std::vector<float> vertexData = vertBuff;
-      for (int i = 0; i < vertexData.size(); i++) {
-        vertexData[i] *= scale_mult;
-      }
-
-      std::ofstream raceTrack;
-      raceTrack.open("raceTrack.ply");
-
-      raceTrack << "ply\n";
-      raceTrack << "format ascii 1.0\n";
-      raceTrack << "element vertex " << (int)vertexData.size() / 3 << "\n";
-      raceTrack << "property float x\n";
-      raceTrack << "property float y\n";
-      raceTrack << "property float z\n";
-      raceTrack << "element face " << (int)faceBuff.size() / 3 << "\n";
-      raceTrack << "property list uint8 int32 vertex_indices\n";
-      raceTrack << "end_header\n";
-
-      //vertices
-      for (int i = 0; i < vertexData.size(); i++) {
-        raceTrack << vertexData[i] << " ";
-        if ((i + 1) % 3 == 0) {
-          raceTrack << "\n";
-        }
-      }
-
-      //faces
-      for (int j = 0; j < faceBuff.size(); j++) {
-
-        if ((j) % 3 == 0) {
-          raceTrack << "3 ";
-        }
-
-        raceTrack << faceBuff[j] << " ";
-        if ((j + 1) % 3 == 0) {
-          raceTrack << "\n";
-        }
-      }
-      raceTrack.close();
-      
-
-    }
+    
 
 
     /// this is called to draw the world
@@ -323,7 +267,12 @@ namespace octet {
       }
 
       if (is_key_going_down(key_f6)) {
-        file_create();
+        float scale_mult = 20.0f / TRACK_WIDTH;
+        std::vector<float> vertexData = track.vertBuff;
+        for (int i = 0; i < vertexData.size(); i++) {
+          vertexData[i] *= scale_mult;
+        }
+        RaceUtils::file_create("race-track.ply", vertexData, track.faceBuff);
       }
 
       if (is_key_going_up(key_f1)) {
@@ -354,11 +303,11 @@ namespace octet {
       }
 
       if (is_key_going_up(key_right)) {
-        TRACK_WIDTH += 0.05f;
+        TRACK_WIDTH += 0.02f;
         refresh_curve();
       }
       if (is_key_going_up(key_left)) {
-        TRACK_WIDTH -= 0.05f;
+        TRACK_WIDTH -= 0.02f;
         refresh_curve();
       }
 
@@ -380,108 +329,19 @@ namespace octet {
         refresh_curve();
       }
 
-      if (debug_mode) {
-        glClearColor(0.5f, 0.5f, 0.5f, 1); // Grey colour
-        draw_debug();
-      }
-      else {
-        glClearColor(0.3f, 0.67f, 0.28f, 1); // Grass green colour
-        // openGL takes in an array of floats. Every 3 floats represents one vertex. 
-        // Bellow is code telling opengl what float vertex data to use.
-        // openGL reads the raw bytes in memory, so we need to tell it how many bytes per value (in this case float 4 bytes) 
-        // and we also need to tell it how many values per vertex (in this case 3 for x, y and z)
-        // We then tell openGL what shader program to use to render the mesh 
-        // and we specify the render mode, here, GL_TRIANGLE_STRIP tells opengl to make the vertex data connect up into a mesh like this:
-        //  The numbers represent the vertices, each vertex is three floats wide (z,y,z)
-        //
-        //   0-----2-----4
-        //   |    /|    /|
-        //   |   / |   / |
-        //   |  /  |  /  |
-        //   | /   | /   |
-        //   |/    |/    |
-        //   1-----3-----5
+      if (debug_mode) track.draw_debug(waypoints);
+      else track.render();
 
-        std::vector<float> leftTrackVertBuff = vertBuff;
-        std::vector<float> rightTrackVertBuff = vertBuff;
-        for (int i = 0; i < leftTrackVertBuff.size(); i += 3) {
-          leftTrackVertBuff[i] = 0.5f * leftTrackVertBuff[i] - 0.5f;
-          leftTrackVertBuff[i+1] = 0.66666f * leftTrackVertBuff[i + 1] - 0.33333f;
-        }
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        glBufferData(GL_ARRAY_BUFFER, leftTrackVertBuff.size() * sizeof(GLfloat), &leftTrackVertBuff[0], GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-        glEnableVertexAttribArray(attribute_pos);
-        glUseProgram(road_shader.get_program());
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, leftTrackVertBuff.size() / 3);
-        glBindVertexArray(attribute_pos);
-
-
-        for (int i = 0; i < rightTrackVertBuff.size(); i += 3) {
-          rightTrackVertBuff[i + 1] = cos(90)*rightTrackVertBuff[i + 1] - sin(90)*rightTrackVertBuff[i + 2];
-          rightTrackVertBuff[i + 2] = sin(90)*rightTrackVertBuff[i + 1] + cos(90)*rightTrackVertBuff[i + 2];
-
-          rightTrackVertBuff[i] = 0.5f * rightTrackVertBuff[i] + 0.5f;
-          rightTrackVertBuff[i + 2] = 0.66666f * rightTrackVertBuff[i + 1] - 0.33333f;
-        }
-        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        glBufferData(GL_ARRAY_BUFFER, rightTrackVertBuff.size() * sizeof(GLfloat), &rightTrackVertBuff[0], GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-        glEnableVertexAttribArray(attribute_pos);
-        glUseProgram(road_shader.get_program());
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, rightTrackVertBuff.size() / 3);
-        glBindVertexArray(attribute_pos);
-
+      if (!debug_mode) {
         glUseProgram(0);
         glColor3f(0.0f, 0.0f, 0.0f); //yellow colour
         glBegin(GL_LINES); //starts drawing of points
-          glVertex3f(-1, 0.33333f, 0);
-          glVertex3f(1, 0.33333f, 0);
-          glVertex3f(0, 0.33333f, 0);
-          glVertex3f(0, -1, 0);
+        glVertex3f(-1, 0.33333f, 0);
+        glVertex3f(1, 0.33333f, 0);
+        glVertex3f(0, 0.33333f, 0);
+        glVertex3f(0, -1, 0);
         glEnd();
       }
-    }
-
-    void draw_debug() {
-      /* https://en.wikibooks.org/wiki/OpenGL_Programming/GLStart/Tut3 */
-
-      // Draw the start and end waypoints in yellow
-      glUseProgram(0);
-      glColor3f(1.0f, 1.0f, 0.0f); //yellow colour
-      glPointSize(5.0f);//set point size to 10 pixels
-      glBegin(GL_POINTS); //starts drawing of points
-      glVertex3f(waypoints[0][0], waypoints[0][1], waypoints[0][2]);
-      glVertex3f(waypoints[waypoints.size() - 1][0], waypoints[waypoints.size() - 1][1], waypoints[waypoints.size() - 1][2]);
-      glEnd();
-
-      // Draw the waypoints
-      glColor3f(1.0f, 0.0f, 0.0f); //red colour
-
-      glBegin(GL_POINTS); //starts drawing of points
-      for (vec3 &point : waypoints) {
-        glVertex3f(point[0], point[1], point[2]);
-      }
-      glEnd();//end drawing of points
-
-      // Draw the bezzier line.
-      glColor3f(0.0f, 1.0f, 0.0f); //green colour
-      glBegin(GL_LINE_STRIP); //starts drawing of line_strip
-      for (int i = 0; i < debugBezBuff.size() - 1; i++) {
-        glVertex3f(debugBezBuff[i][0], debugBezBuff[i][1], debugBezBuff[i][2]);
-        glVertex3f(debugBezBuff[i + 1][0], debugBezBuff[i + 1][1], debugBezBuff[i + 1][2]);
-      }
-      glEnd();//end drawing of Line_strip
-
-
-      glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-      glBufferData(GL_ARRAY_BUFFER, vertBuff.size() * sizeof(GLfloat), &vertBuff[0], GL_DYNAMIC_DRAW);
-      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-      glEnableVertexAttribArray(attribute_pos);
-      glUseProgram(road_shader.get_program());
-      glDrawArrays(GL_LINE_STRIP, 0, vertBuff.size() / 3);
-      glBindVertexArray(attribute_pos);
-
     }
   };
 }
