@@ -55,19 +55,22 @@ namespace octet {
       TRACK_WIDTH = 0.00f;
       DETAIL_STEP = 0.01f;
       height_scale = 0.5f;
-      track_length = 80;
+      track_length = 8;
     }
 
     void refresh_curve() {
       switch (current_curve) {
       case QUADRATIC_BEZIER:
         curve_step = 2;
+        if (track_length < 3) return;
         break;
       case CUBIC_BEZIER:
         curve_step = 3;
+        if (track_length < 4) return;
         break;
       case CATMULL_ROM:
         curve_step = 1;
+        if (track_length < 4) return;
         break;
       }
 

@@ -106,13 +106,17 @@ namespace octet {
       }
 
       waypoints = std::vector<vec3>();
-      float angle_size = 360.0f / (float)num_points;
+      float angle_size = 3.14159265f * 2 / (float)num_points;
 
       for (int i = 0; i < num_points; ++i) {
-        float angle = (random_float(0, angle_size)) + (i * angle_size);
+        float angle = (random_float(0, angle_size));
+        angle *= 0.1;
+        angle = angle * 8 + angle;
+        angle += (i * angle_size);
+
         float radius = random_float(0.1, 1);
-        float x = radius * cos(angle * 3.14159265f / 180.0);
-        float y = radius * sin(angle * 3.14159265f / 180.0);
+        float x = radius * cos(angle);
+        float y = radius * sin(angle);
         waypoints.push_back(vec3(x, y, 0));
       }
 
@@ -134,9 +138,12 @@ namespace octet {
       float angle_size = 3.14159265f * 2 / (float)num_points;
 
       for (int i = 0; i < num_points; ++i) {
-        float angle =  (i * angle_size);
+        float angle = (random_float(0, angle_size));
+        angle *= 0.1;
+        angle = angle * 8 + angle;
+        angle += (i * angle_size);
 
-        float radius = (float)perlin_noise.noise((double)(angle / (2 * 3.14159265f) )*9, 0.0, 0.0) * 0.9f + 0.1f;
+        float radius = (float)perlin_noise.noise((double)(angle / (2 * 3.14159265f) )*9, (double)(angle / (2 * 3.14159265f)) * 9, 0.0) * 0.9f + 0.1f;
 
         float x = radius * cos(angle);
         float y = radius * sin(angle);
