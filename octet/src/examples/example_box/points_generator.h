@@ -111,7 +111,7 @@ namespace octet {
       for (int i = 0; i < num_points; ++i) {
         float angle = (random_float(0, angle_size));
         angle *= 0.1;
-        angle = angle * 8 + angle;
+        angle = angle * 6 + angle * 2;
         angle += (i * angle_size);
 
         float radius = random_float(0.1, 1);
@@ -140,10 +140,10 @@ namespace octet {
       for (int i = 0; i < num_points; ++i) {
         float angle = (random_float(0, angle_size));
         angle *= 0.1;
-        angle = angle * 8 + angle;
+        angle = angle * 6 + angle * 2;
         angle += (i * angle_size);
 
-        float radius = (float)perlin_noise.noise((double)(angle / (2 * 3.14159265f) )*9, (double)(angle / (2 * 3.14159265f)) * 9, 0.0) * 0.9f + 0.1f;
+        float radius = (float)perlin_noise.noise((double)(angle / (2 * 3.14159265f) ) * 9, (double)(angle / (2 * 3.14159265f)) * 9, 0.0) * 0.9f + 0.1f;
 
         float x = radius * cos(angle);
         float y = radius * sin(angle);

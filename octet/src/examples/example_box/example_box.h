@@ -8,10 +8,12 @@
 
 #include <stdlib.h>
 #include <ctime>
+#include <functional>
 #include "points_generator.h"
 #include "perlin.h"
 #include "RaceUtils.h"
 #include "track_mesh.h"
+#include "tool_button.h"
 
 
 namespace octet {
@@ -19,12 +21,14 @@ namespace octet {
   class example_box : public app {
   private:
 
+    bitmap_font font;
+
+    mat4t cameraToWorld;
     track_mesh track;
+    track_mesh side_track;
     perlin perlin_noise;
     points_generator pg;
     std::vector<vec3> waypoints;
-
-
 
     enum curve_mode {
       QUADRATIC_BEZIER = 0,
@@ -34,7 +38,7 @@ namespace octet {
     curve_mode current_curve;
     curve_mode prev_curve;
 
-    bool debug_mode = true;
+    bool debug_mode = false;
 
     //// scene for drawing box
     //ref<visual_scene> app_scene;
@@ -45,14 +49,15 @@ namespace octet {
     float height_scale;
     int track_length;
     int curve_step;
+    bool heightMode2D = true;
 
     unsigned int seed;
 
 
     void clear_curve() {
       seed = std::time(nullptr);
-      seed = 10000;
-      TRACK_WIDTH = 0.00f;
+      //seed = 10000;
+      TRACK_WIDTH = 0.02f;
       DETAIL_STEP = 0.01f;
       height_scale = 0.5f;
       track_length = 8;
@@ -126,7 +131,9 @@ namespace octet {
           vec3 tan = segment_pos - pos;
           vec3 norm = tan.cross(vec3(0, 0, 1)); // Get normal from tangent.
 
-          double n = (float)perlin_noise.noise((double)pos[0], (double)pos[1], 0.0) * height_scale;
+          double n = (double)(perlin_noise.noise((double)(t+(float)i), (double)(t + (float)i), 0.0) * height_scale);
+
+          //double n = (float)perlin_noise.noise((double)pos[0], (double)pos[1], 0.0) * height_scale;
 
           norm = norm.normalize() * TRACK_WIDTH * 0.5f; // Create track radius
 
@@ -155,6 +162,8 @@ namespace octet {
         }
       }
       track.refresh_track(vertBuff, faceBuff, debugBezBuff);
+      side_track.refresh_track(vertBuff, faceBuff, debugBezBuff);
+
       /*
           float TRACK_WIDTH = 0.1f;
     float DETAIL_STEP = 0.01f;
@@ -163,7 +172,8 @@ namespace octet {
     int curve_step;
       */
       printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-      printf("RACE TRACK\n_____________________\nTrack width: %f\nMesh Detail: %f\nHeight Scale: %f\nTrack Length: %d\n_____________________\n", TRACK_WIDTH, DETAIL_STEP, height_scale, track_length);
+      printf("RACE TRACK\nF5: Randomise New Track\nF6: Save track\nF1: Quad Bezier Mode\nF2: Cubic Bezier Mode\nF3: Catmull Rom Mode\nF4: Toggle Height Mode (Linear & 2D)\nUp & Down: Track Length\nRight & Left: Track Width\nF7 & F8: Height Amplitude\nF9 & F10: Mesh detail\n_____________________\n");
+      printf("Seed: %d\n_____________________\nTrack width: %f\nMesh Detail: %f\nHeight Scale: %f\nTrack Length: %d\n_____________________\n", seed, TRACK_WIDTH, DETAIL_STEP, height_scale, track_length);
       printf("Mesh with %d vertices\n", (int) vertBuff.size() / 3);
       printf("%d total faces\n", (int) faceBuff.size() / 3);
     }
@@ -237,14 +247,41 @@ namespace octet {
     }
 
   public:
+
+    int window_w = 1200;
+    int window_h = 900;
+
     /// this is called when we construct the class before everything is initialised.
-    example_box(int argc, char **argv) : app(argc, argv) {
+    example_box(int argc, char **argv) : app(argc, argv), font(512, 256, "assets/big.fnt") {
     }
+
+    //static example_box controller;
+    //static void testFunc() {
+    //  printf("Button Pressed");
+    //  controller->current_curve = CUBIC_BEZIER;
+    //  controller->refresh_curve();
+    //}
+
+
+    tool_button b;
 
     /// this is called once OpenGL is initialized
     void app_init() {
+
+      cameraToWorld.loadIdentity();
+      cameraToWorld.translate(0, 0, 3);
+      //cameraToWorld.rotateX(180);
+      //cameraToWorld.rotateY(180);
+
       track = track_mesh();
-      track.init();
+      track.init(-2, -1, 1, 1);
+      track.scale(4, 4, 4);
+
+      side_track = track_mesh();
+      side_track.init(2, -1.5, 1, 1);
+      side_track.scale(4, 4, 4);
+      side_track.rotate(-90, 1, 0, 0);
+
       perlin_noise = perlin();
       pg = points_generator();
 
@@ -253,16 +290,27 @@ namespace octet {
 
       clear_curve();
       refresh_curve();
-    }
 
-    
+
+      /*std::function<void(example_box* parent)> fn1 = testFunc;
+      testFunc(this);*/
+      //b = tool_button();
+      //b.init(0, 2, 7.9f, 1);
+
+    }
 
 
     /// this is called to draw the world
     void draw_world(int x, int y, int w, int h) {
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       int vx = 0, vy = 0;
       get_viewport_size(vx, vy);
+      
+
+      //int mx, my = 0;;
+      //get_mouse_pos(mx, my);
+      //if (b.isClicked(mx, my)) {
+      //  b.click();
+      //}
 
       if (is_key_going_up(key_f5)) {
         clear_curve();
@@ -315,12 +363,16 @@ namespace octet {
       }
 
       if (is_key_going_up(key_f8)) {
-        height_scale += 0.1f;
-        refresh_curve();
+        if (height_scale < 1.0f) {
+          height_scale += 0.1f;
+          refresh_curve();
+        }
       }
       if (is_key_going_up(key_f7)) {
-        height_scale -= 0.1f;
-        refresh_curve();
+        if(height_scale > 0.0f){
+          height_scale -= 0.1f;
+          refresh_curve();
+        }
       }
 
       if (is_key_going_up(key_f10)) {
@@ -331,9 +383,30 @@ namespace octet {
         DETAIL_STEP += 0.01f;
         refresh_curve();
       }
+      if (is_key_going_up(key_f4)) {
+        DETAIL_STEP += 0.01f;
+        refresh_curve();
+      }
 
-      if (debug_mode) track.draw_debug(waypoints);
-      else track.render();
+
+      // RENDERING
+
+      // Local values for viewport
+      app_common::get_viewport_size(window_w, window_h);
+
+      // set a viewport - includes whole window area
+      glViewport(x, y, w, h);
+
+      glClearColor(0.3f, 0.67f, 0.28f, 1);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+      //b.render(cameraToWorld);
+      side_track.rotate(1, 0, 0, 1);
+      track.render(cameraToWorld);
+      side_track.render(cameraToWorld);
+      //if (debug_mode) track.draw_debug(waypoints);
+      //else track.render(cameraToWorld);
 
       if (!debug_mode) {
         glUseProgram(0);

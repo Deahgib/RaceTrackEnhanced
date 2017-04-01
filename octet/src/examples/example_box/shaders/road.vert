@@ -1,8 +1,13 @@
-#version 330 core
-  
-layout (location = 0) in vec2 position;
+#version 330
+
+attribute vec4 pos;
+
+uniform mat4 modelToProjection;
+
+varying vec4 coord;
 
 void main()
 {
-    gl_Position = vec4(position, 0.0, 1.0);
+	coord = pos;
+    gl_Position = modelToProjection * pos;
 }

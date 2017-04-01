@@ -439,7 +439,7 @@ namespace octet { namespace math {
       mat4t mul(
         vec4( X,  0.0f,  0.0f,  0.0f ),
         vec4( 0.0f,  Y,  0.0f,  0.0f ),
-        vec4( 0.0f,  0.0f,  Z,  0.0f ),
+        vec4( 0.0f,  0.0f,  -Z,  0.0f ),
         vec4( tx, ty, tz, 1.0f )
       );
       *this = mul * *this;
