@@ -50,6 +50,7 @@ namespace octet {
     int track_length;
     int curve_step;
     bool heightMode2D = true;
+    bool smooth_track = false;
 
     unsigned int seed;
 
@@ -62,6 +63,9 @@ namespace octet {
       height_scale = 0.5f;
       track_length = 8;
     }
+
+    //TEMPORARY DEBUG VAR
+    double minSimilarity =0;
 
     void refresh_curve() {
       switch (current_curve) {
@@ -129,11 +133,47 @@ namespace octet {
           vec3 pos = get_bezier_point(t, i);
           vec3 segment_pos = get_bezier_point(t + DETAIL_STEP * 0.01f, i);
           vec3 tan = segment_pos - pos;
-          vec3 norm = tan.cross(vec3(0, 0, 1)); // Get normal from tangent.
+          tan = tan.normalize();
+          vec3 norm;
+          if (!smooth_track) {
+            norm = tan.cross(vec3(0, 0, 1)); // Get normal from tangent.
+          }
+          else 
+          {
+            vec3 next_pos = get_bezier_point(t + DETAIL_STEP*1, i);
+            vec3 next_segment_pos = get_bezier_point(t + DETAIL_STEP*1 + DETAIL_STEP * 0.01f, i);
+            vec3 next_tan = next_segment_pos - next_pos;
+            next_tan = next_tan.normalize();
 
-          double n = (double)(perlin_noise.noise((double)(t+(float)i), (double)(t + (float)i), 0.0) * height_scale);
+            double similarity = (1 - tan.dot(next_tan)) * 1 / DETAIL_STEP;
+            if (similarity > 0.5f) similarity = 0.5f;
+            if (similarity > minSimilarity) {
+              printf("Found new min: %lf\n", similarity);
+              minSimilarity = similarity;
+            }
+            // Angle of the next_tan vector to the world Y axis for later rotation
+            float angle = vec3(0, 1, 0).dot(next_tan) / next_tan.length();
 
-          //double n = (float)perlin_noise.noise((double)pos[0], (double)pos[1], 0.0) * height_scale;
+            // Work out if the next tan is veering left or right.
+            float direction = tan.cross(vec3(0, 0, 1)).dot(next_tan);
+            direction = direction / abs(direction);
+
+            mat4t rotation;
+            rotation.loadIdentity();
+            rotation.rotate(90.0f * similarity * direction /** abs(ntan[1])*/, 0, 1, 0);
+            rotation.rotate(angle, 0, 0, 1);
+            vec3 upVec = vec3(0, 0, 1);
+            upVec = upVec * rotation;
+          
+            norm = tan.cross(upVec);
+          }
+
+          double n;
+          if(heightMode2D)
+            n = (float)perlin_noise.noise((double)pos[0], (double)pos[1], 0.0) * height_scale;
+          else
+            n = (double)(perlin_noise.noise((double)(t+(float)i), (double)(t + (float)i), 0.0) * height_scale);
+
 
           norm = norm.normalize() * TRACK_WIDTH * 0.5f; // Create track radius
 
@@ -142,10 +182,10 @@ namespace octet {
 
           vertBuff.push_back(p1[0]); // Add vertex data (3 Floats (x, y and y)) to the buffer
           vertBuff.push_back(p1[1]); // The buffer is used by opengl to render the triangles
-          vertBuff.push_back(n); // Use the perlin height at the center of the track for this point along the track.
+          vertBuff.push_back(p1[2]+n); // Use the perlin height at the center of the track for this point along the track.
           vertBuff.push_back(p2[0]);
           vertBuff.push_back(p2[1]);
-          vertBuff.push_back(n);
+          vertBuff.push_back(p2[2] + n);
 
           if (vertPair > 0) {
             faceBuff.push_back(vertPair * 2 - 2);
@@ -164,13 +204,7 @@ namespace octet {
       track.refresh_track(vertBuff, faceBuff, debugBezBuff);
       side_track.refresh_track(vertBuff, faceBuff, debugBezBuff);
 
-      /*
-          float TRACK_WIDTH = 0.1f;
-    float DETAIL_STEP = 0.01f;
-    float height_scale = 0.5f;
-    int track_length = 10;
-    int curve_step;
-      */
+      
       printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
       printf("RACE TRACK\nF5: Randomise New Track\nF6: Save track\nF1: Quad Bezier Mode\nF2: Cubic Bezier Mode\nF3: Catmull Rom Mode\nF4: Toggle Height Mode (Linear & 2D)\nUp & Down: Track Length\nRight & Left: Track Width\nF7 & F8: Height Amplitude\nF9 & F10: Mesh detail\n_____________________\n");
       printf("Seed: %d\n_____________________\nTrack width: %f\nMesh Detail: %f\nHeight Scale: %f\nTrack Length: %d\n_____________________\n", seed, TRACK_WIDTH, DETAIL_STEP, height_scale, track_length);
@@ -376,15 +410,23 @@ namespace octet {
       }
 
       if (is_key_going_up(key_f10)) {
-        DETAIL_STEP -= 0.01f;
-        refresh_curve();
+        if (DETAIL_STEP > 0.01f) {
+          DETAIL_STEP -= 0.01f;
+          refresh_curve();
+        }
       }
       if (is_key_going_up(key_f9)) {
-        DETAIL_STEP += 0.01f;
-        refresh_curve();
+        if (DETAIL_STEP < 0.1f) {
+          DETAIL_STEP += 0.01f;
+          refresh_curve();
+        }
       }
       if (is_key_going_up(key_f4)) {
-        DETAIL_STEP += 0.01f;
+        heightMode2D = !heightMode2D;
+        refresh_curve();
+      }
+      if (is_key_going_up(key_ctrl)) {
+        smooth_track = !smooth_track;
         refresh_curve();
       }
 
