@@ -30,6 +30,13 @@ namespace octet {
     points_generator pg;
     std::vector<vec3> waypoints;
 
+    enum random_mode {
+      random_average = 0,
+      random_radial,
+      perlin_radial
+    };
+    random_mode active_random_mode;
+
     enum curve_mode {
       QUADRATIC_BEZIER = 0,
       CUBIC_BEZIER,
@@ -88,7 +95,17 @@ namespace octet {
       // create points for curves
       int num_points = curve_step * track_length + 1;
       waypoints = std::vector<vec3>();
-      waypoints = pg.generate_radial_points(num_points, seed);
+      switch (active_random_mode) {
+        case random_average:
+          waypoints = pg.generate_random_points(num_points, seed);
+          break;
+        case random_radial:
+          waypoints = pg.generate_radial_points(num_points, seed);
+          break;
+        case perlin_radial:
+          waypoints = pg.generate_circular_perlin_points(num_points, seed);
+          break;
+      }
 
 
       std::vector<vec3> debugBezBuff = std::vector<vec3>();
@@ -129,6 +146,7 @@ namespace octet {
           }
         }
 
+        vec3 last_tan = vec3(0, 0, 0);
         for (float t = 0.0f; t <= 1.0f; t += DETAIL_STEP) {
           vec3 pos = get_bezier_point(t, i);
           vec3 segment_pos = get_bezier_point(t + DETAIL_STEP * 0.01f, i);
@@ -140,13 +158,17 @@ namespace octet {
           }
           else 
           {
-            vec3 next_pos = get_bezier_point(t + DETAIL_STEP*1, i);
-            vec3 next_segment_pos = get_bezier_point(t + DETAIL_STEP*1 + DETAIL_STEP * 0.01f, i);
-            vec3 next_tan = next_segment_pos - next_pos;
-            next_tan = next_tan.normalize();
-
-            double similarity = (1 - tan.dot(next_tan)) * 1 / DETAIL_STEP;
-            if (similarity > 0.5f) similarity = 0.5f;
+            vec3 next_tan = vec3(0,0,0);
+            for (int k = 1; k <= (int)((1.0f / DETAIL_STEP) / 10.0f); k++) {
+              vec3 next_pos = get_bezier_point(t + DETAIL_STEP * k, i);
+              vec3 next_segment_pos = get_bezier_point(t + DETAIL_STEP * k + DETAIL_STEP * 0.01f, i);
+              next_tan += next_segment_pos - next_pos;
+            }
+            vec3 tmp_tan = next_tan.normalize();
+            next_tan = (tmp_tan + last_tan)/2;
+            
+            double similarity = (1 - tan.dot(next_tan)) * (1.0 / (double)DETAIL_STEP);
+            if (similarity > 0.4f) similarity = 0.4f;
             if (similarity > minSimilarity) {
               printf("Found new min: %lf\n", similarity);
               minSimilarity = similarity;
@@ -156,7 +178,7 @@ namespace octet {
 
             // Work out if the next tan is veering left or right.
             float direction = tan.cross(vec3(0, 0, 1)).dot(next_tan);
-            direction = direction / abs(direction);
+            direction = direction / abs(direction); // Trick to get either 1 or -1 for later sign.
 
             mat4t rotation;
             rotation.loadIdentity();
@@ -165,6 +187,7 @@ namespace octet {
             vec3 upVec = vec3(0, 0, 1);
             upVec = upVec * rotation;
           
+            last_tan = tmp_tan;
             norm = tan.cross(upVec);
           }
 
@@ -282,8 +305,8 @@ namespace octet {
 
   public:
 
-    int window_w = 1200;
-    int window_h = 900;
+    int window_w = 1152;
+    int window_h = 648;
 
     /// this is called when we construct the class before everything is initialised.
     example_box(int argc, char **argv) : app(argc, argv), font(512, 256, "assets/big.fnt") {
@@ -308,7 +331,7 @@ namespace octet {
       //cameraToWorld.rotateY(180);
 
       track = track_mesh();
-      track.init(-2, -1, 1, 1);
+      track.init(-2, -0.3333, 1, 1);
       track.scale(4, 4, 4);
 
       side_track = track_mesh();
@@ -322,9 +345,10 @@ namespace octet {
       current_curve = CATMULL_ROM;
       track_length = 10;
 
+      active_random_mode = random_radial;
+
       clear_curve();
       refresh_curve();
-
 
       /*std::function<void(example_box* parent)> fn1 = testFunc;
       testFunc(this);*/
@@ -338,13 +362,6 @@ namespace octet {
     void draw_world(int x, int y, int w, int h) {
       int vx = 0, vy = 0;
       get_viewport_size(vx, vy);
-      
-
-      //int mx, my = 0;;
-      //get_mouse_pos(mx, my);
-      //if (b.isClicked(mx, my)) {
-      //  b.click();
-      //}
 
       if (is_key_going_up(key_f5)) {
         clear_curve();
@@ -430,6 +447,18 @@ namespace octet {
         refresh_curve();
       }
 
+      if (is_key_going_up(key_insert)) {
+        active_random_mode = random_average;
+        refresh_curve();
+      }
+      if (is_key_going_up(key_home)) {
+        active_random_mode = random_radial;
+        refresh_curve();
+      }
+      if (is_key_going_up(key_page_up)) {
+        active_random_mode = perlin_radial;
+        refresh_curve();
+      }
 
       // RENDERING
 
@@ -454,9 +483,9 @@ namespace octet {
         glUseProgram(0);
         glColor3f(0.0f, 0.0f, 0.0f); //yellow colour
         glBegin(GL_LINES); //starts drawing of points
-        glVertex3f(-1, 0.33333f, 0);
-        glVertex3f(1, 0.33333f, 0);
-        glVertex3f(0, 0.33333f, 0);
+        glVertex3f(-1, 0.7777f, 0);
+        glVertex3f(1, 0.7777f, 0);
+        glVertex3f(0, 0.7777f, 0);
         glVertex3f(0, -1, 0);
         glEnd();
       }
